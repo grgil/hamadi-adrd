@@ -36,6 +36,22 @@ inpt_keep_cols = ["SEX", "AGE", "LOSDAYS", "EDHR_ARR", "DISCHSTAT", "PAYER", "WE
                inpt_diag_cols
 
 # ============================================================================
+# Z-CODE CATEGORY MAPPINGS
+# ============================================================================
+
+z_code_categories = [
+    'Education/Literacy',           # Z55
+    'Employment',                   # Z56
+    'Occupational Exposure',        # Z57
+    'Physical Environment',         # Z58
+    'Housing/Economic',             # Z59
+    'Social Environment',           # Z60
+    'Upbringing',                   # Z61
+    'Family/Household',             # Z62
+    'Other Psychosocial'            # Z63-Z65
+    ]
+
+# ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
 
@@ -49,7 +65,6 @@ def get_adrd_pattern(year):
     else: 
         return adrd_icd10_pattern
     
-
 def get_sdoh_pattern(year):
     """
     Return correct SDOH diagnosis code pattern for year.
@@ -59,3 +74,15 @@ def get_sdoh_pattern(year):
         return sdoh_icd9_pattern
     else:
         return sdoh_icd10_pattern
+    
+def categorize_z_code(code):
+    """
+    Map Z-code to category based on numeric portion.
+    """
+    code_num = int(code[1:3])
+    
+    if code_num <= 62:
+        return z_code_categories[code_num - 55]
+    else:
+        return z_code_categories[8]               
+    
