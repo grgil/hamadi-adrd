@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 
 # ============================================================================
 # REGEX PATTERNS
@@ -14,6 +15,9 @@ sdoh_icd10_pattern = re.compile(r"^Z(?:5[5-9]|6[0-5])(?:\.\d+)?$")
 # ICD-9 codes (before October 2015) - TODO: Add patterns in future sprint
 adrd_icd9_pattern = None
 sdoh_icd9_pattern = None
+
+# Compile SDOH regex patterns once at module level
+z_code_pattern = re.compile(r'Z5[5-9](?:\.\d+)?|Z6[0-5](?:\.\d+)?')
 
 # ============================================================================
 # COLUMN DEFINITIONS
@@ -34,6 +38,10 @@ ed_keep_cols = ["SEX", "AGE", "LOSDAYS", "HR_ARRIVAL", "PT_STATUS", "PAYER", "WE
 inpt_keep_cols = ["SEX", "AGE", "LOSDAYS", "EDHR_ARR", "DISCHSTAT", "PAYER", "WEEKDAY", "ADM_TIME", "MSDRG", "PRINPROC", "TCHRGS"] + \
                [f'OTHCPT{i}' for i in range(1, 31)] + \
                inpt_diag_cols
+
+# Define population groups
+POP_NAMES = ['ADRD+SDOH', 'Any_ADRD', 'Any_SDOH']
+SDOH_POP= ['ADRD+SDOH', 'Any_SDOH']
 
 # ============================================================================
 # Z-CODE CATEGORY MAPPINGS
@@ -84,5 +92,10 @@ def categorize_z_code(code):
     if code_num <= 62:
         return z_code_categories[code_num - 55]
     else:
-        return z_code_categories[8]               
+        return z_code_categories[8]          
+
+def timestamp_print(message):
+    """Print message with timestamp."""
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    print(f"[{timestamp}] {message}")     
     

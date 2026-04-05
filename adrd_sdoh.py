@@ -4,7 +4,6 @@ import re
 
 from mappings import *
 
-
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
@@ -40,7 +39,6 @@ def aggregate_quarterly_data(year, care_setting):
     
     return annual_df
 
-
 def load_encounter_data(year, care_setting, quarterly=True):
     """
     Load encounter data for specified year and care setting.
@@ -70,10 +68,11 @@ def has_code_pattern(df, diag_cols, pattern):
     Check if any diagnosis column contains code matching pattern.
     
     """
-    return df[diag_cols].apply(
-        lambda x: x.astype(str).str.contains(pattern, na=False, regex=True)
-    ).any(axis=1)
-
+    # Convert to string outside loop
+    df_str = df[diag_cols].astype(str)
+    
+    matches = df_str.apply(lambda col: col.str.contains(pattern, na=False, regex=True))
+    return matches.any(axis=1)
 
 def filter_adrd_only(df, diag_cols, year):
     """
@@ -88,6 +87,17 @@ def filter_adrd_only(df, diag_cols, year):
     
     return filtered
 
+def filter_sdoh_only(df, diag_cols, year):
+    """
+    Filter to encounters with SDOH codes.
+    
+    """
+    sdoh_mask = has_code_pattern(df, diag_cols, z_code_pattern)
+    
+    filtered = df[sdoh_mask].copy()
+    filtered['YEAR'] = year
+    
+    return filtered
 
 def filter_adrd_with_sdoh(df, diag_cols, year):
     """
@@ -104,7 +114,6 @@ def filter_adrd_with_sdoh(df, diag_cols, year):
     
     return filtered
 
-
 def extract_all_z_codes(row, diag_cols):
     """
     Extract all Z55-Z65 codes from diagnosis columns in an encounter.
@@ -114,10 +123,7 @@ def extract_all_z_codes(row, diag_cols):
     
     for col in diag_cols:
         if pd.notna(row[col]):
-            # Match full codes including subcodes (Z59.0, Z59.1)
-            matches = re.findall(r'Z5[5-9](?:\.\d+)?|Z6[0-5](?:\.\d+)?', str(row[col]))
-            # Strip to category level (Z59.0 -> Z59)
-            matches = [m[:3] for m in matches]
+            matches = [m[:3] for m in z_code_pattern.findall(str(row[col]))]
             z_codes.extend(matches)
     
     return z_codes
@@ -127,7 +133,7 @@ def extract_all_z_codes(row, diag_cols):
 # ANALYSIS FUNCTIONS
 # ============================================================================
 
-def create_z_code_summary(ed_z, inpt_z):
+def create_z_code_table(ed_z, inpt_z):
     """
     Create summary table of Z-code counts by category.
 
@@ -166,7 +172,6 @@ def create_z_code_summary(ed_z, inpt_z):
     summary['Total_Percent'] = (summary['Total_Count'] / summary['Total_Count'].sum() * 100).round(1)
     
     return summary
-
 
 def create_demographics_table(ed_filtered, inpt_filtered, population_label):
     """
@@ -289,40 +294,52 @@ def create_demographics_table(ed_filtered, inpt_filtered, population_label):
     
     return pd.DataFrame(rows)
 
-
-def create_year_summary(year, ed_adrd_sdoh, inpt_adrd_sdoh, ed_adrd_all, inpt_adrd_all):
+def create_year_summary(year, populations):
     """
     Create comprehensive summary for a single year or combined period.
     Exports Z-codes and demographics for ADRD+SDOH, All ADRD, and All Encounters.
 
     """
+
+    if not populations:
+        timestamp_print(f"WARNING: No populations provided for {year}. Skipping summary generation.")
+        return
     
-    # === Z-CODE SUMMARY (ADRD+SDOH only) ===
+    for pop_name, pop_data in populations.items():
+        if len(pop_data['ed']) == 0 and len(pop_data['inpt']) == 0:
+            timestamp_print(f"WARNING: {pop_name} has no encounters for {year}.")
+
+    # === Z-CODE SUMMARY ===
     
-    ed_z = ed_adrd_sdoh.apply(lambda row: extract_all_z_codes(row, ed_diag_cols), axis=1)
-    inpt_z = inpt_adrd_sdoh.apply(lambda row: extract_all_z_codes(row, inpt_diag_cols), axis=1)
+    z_summaries = []
     
-    z_summary = create_z_code_summary(ed_z, inpt_z)
-    z_summary.to_csv(f"{output_dir}/z_code_summary_{year}.csv", index=False)
+    for pop_name, pop_data in populations.items():
+        if pop_name in SDOH_POP:
+            
+            ed_z = pop_data['ed'].apply(lambda row: extract_all_z_codes(row, ed_diag_cols), axis=1)
+            inpt_z = pop_data['inpt'].apply(lambda row: extract_all_z_codes(row, inpt_diag_cols), axis=1)
+            
+            z_summary = create_z_code_table(ed_z, inpt_z)
+            z_summary.insert(0, 'Population', pop_name)
+            z_summaries.append(z_summary)
+    
+    z_summary_combined = pd.concat(z_summaries, ignore_index=True)
+    z_summary_combined.to_csv(f"{output_dir}/z_code_summary_{year}.csv", index=False)
     
     # === DEMOGRAPHICS SUMMARIES ===
     
-    # Population 1: ADRD+SDOH
-    demog_adrd_sdoh = create_demographics_table(
-        ed_adrd_sdoh, inpt_adrd_sdoh, 
-        population_label="ADRD+SDOH"
-    )
-    
-    # Population 2: All ADRD (regardless of SDOH)
-    demog_adrd_all = create_demographics_table(
-        ed_adrd_all, inpt_adrd_all,
-        population_label="All_ADRD"
-    )
-    
-    # Combine all demographics into one file
-    combined_demog = pd.concat([demog_adrd_sdoh, demog_adrd_all], ignore_index=True)
-    combined_demog.to_csv(f"{output_dir}/demographics_summary_{year}.csv", index=False)
+    demog_summaries = []
 
+    for pop_name, pop_data in populations.items():
+        demog = create_demographics_table(
+            pop_data['ed'],
+            pop_data['inpt'],
+            pop_name
+        )
+        demog_summaries.append(demog)
+
+    combined_demog = pd.concat(demog_summaries, ignore_index=True)
+    combined_demog.to_csv(f"{output_dir}/demographics_summary_{year}.csv", index=False)
 
 # ============================================================================
 # MULTI-YEAR PROCESSING
@@ -330,49 +347,58 @@ def create_year_summary(year, ed_adrd_sdoh, inpt_adrd_sdoh, ed_adrd_all, inpt_ad
 
 def process_multiple_years(years, quarterly=True):
     
-    all_ed_adrd_sdoh = []
-    all_inpt_adrd_sdoh = []
-    all_ed_adrd_all = []
-    all_inpt_adrd_all = []
+    # Store populations
+    all_populations = {
+        'ADRD+SDOH': {'ed': [], 'inpt': []},
+        'Any_ADRD': {'ed': [], 'inpt': []},
+        'Any_SDOH': {'ed': [], 'inpt': []}
+    }
     
     for year in years:
-        print(f"\nProcessing {year}...")
+        timestamp_print(f"Processing {year}...")
         
         # Load
         ed_df = load_encounter_data(year, 'ED', quarterly=quarterly)
         inpt_df = load_encounter_data(year, 'Inpatient', quarterly=quarterly)
         
-        # Filter ADRD+SDOH
-        ed_adrd_sdoh = filter_adrd_with_sdoh(ed_df, ed_diag_cols, year)
-        inpt_adrd_sdoh = filter_adrd_with_sdoh(inpt_df, inpt_diag_cols, year)
-        
-        # Filter ALL ADRD
-        ed_adrd_all = filter_adrd_only(ed_df, ed_diag_cols, year)
-        inpt_adrd_all = filter_adrd_only(inpt_df, inpt_diag_cols, year)
+        # Filter all populations
+        populations = {
+            'ADRD+SDOH': {
+                'ed': filter_adrd_with_sdoh(ed_df, ed_diag_cols, year),
+                'inpt': filter_adrd_with_sdoh(inpt_df, inpt_diag_cols, year)},
+            'Any_ADRD': {
+                'ed': filter_adrd_only(ed_df, ed_diag_cols, year),
+                'inpt': filter_adrd_only(inpt_df, inpt_diag_cols, year)},
+            'Any_SDOH': {
+                'ed': filter_sdoh_only(ed_df, ed_diag_cols, year),
+                'inpt': filter_sdoh_only(inpt_df, inpt_diag_cols, year)}
+        }
         
         # Create year summary
-        create_year_summary(year, ed_adrd_sdoh, inpt_adrd_sdoh, ed_adrd_all, inpt_adrd_all)
-        print(f"  Exported summaries for {year}")
+        create_year_summary(year, populations)
+        timestamp_print(f"Exported summaries for {year}")
         
-        # Store for combined
-        all_ed_adrd_sdoh.append(ed_adrd_sdoh)
-        all_inpt_adrd_sdoh.append(inpt_adrd_sdoh)
-        all_ed_adrd_all.append(ed_adrd_all)
-        all_inpt_adrd_all.append(inpt_adrd_all)
+        # Store for combined 
+        for pop_name in populations:
+            all_populations[pop_name]['ed'].append(populations[pop_name]['ed'])
+            all_populations[pop_name]['inpt'].append(populations[pop_name]['inpt'])
         
         del ed_df, inpt_df
     
-    # Combined
-    combined_ed_sdoh = pd.concat(all_ed_adrd_sdoh, ignore_index=True)
-    combined_inpt_sdoh = pd.concat(all_inpt_adrd_sdoh, ignore_index=True)
-    combined_ed_adrd_all = pd.concat(all_ed_adrd_all, ignore_index=True)
-    combined_inpt_adrd_all = pd.concat(all_inpt_adrd_all, ignore_index=True)
+    # Combine all years
+    timestamp_print("Creating combined summary...")
+    
+    combined_populations = {}
+    for pop_name in all_populations:
+        combined_populations[pop_name] = {
+            'ed': pd.concat(all_populations[pop_name]['ed'], ignore_index=True),
+            'inpt': pd.concat(all_populations[pop_name]['inpt'], ignore_index=True)
+        }
     
     year_range = f"{min(years)}-{max(years)}"
-    create_year_summary(year_range, combined_ed_sdoh, combined_inpt_sdoh, combined_ed_adrd_all, combined_inpt_adrd_all)
+    create_year_summary(year_range, combined_populations)
     
-    print("\nAll summaries exported to output directory.")
-
+    timestamp_print("All summaries exported to output directory.")
 
 # ============================================================================
 # ENTRY POINT
