@@ -42,21 +42,39 @@ def aggregate_quarterly_data(year, care_setting):
 def load_encounter_data(year, care_setting, quarterly=True):
     """
     Load encounter data for specified year and care setting.
-
     """
-    if quarterly:
-        return aggregate_quarterly_data(year, care_setting)
+    import time
     
+    care_setting = care_setting.upper()
+    
+    # Time the loading
+    start_load = time.time()
+    
+    if quarterly:
+        df = aggregate_quarterly_data(year, care_setting)
     else:
-        care_setting = care_setting.upper()
-        
         if care_setting == 'ED':
             filepath = f"{source_dir}/ED_{year}.csv"
         else:
             filepath = f"{source_dir}/INPATIENT_{year}.csv"
         
         df = pd.read_csv(filepath, low_memory=False)
-        return df
+    
+    load_time = time.time() - start_load
+    timestamp_print(f"  Loaded {care_setting} data in {load_time:.1f}s - shape: {df.shape}")
+    
+    # Time the column filtering
+    start_filter = time.time()
+    
+    if care_setting == 'ED':
+        df = df[df.columns.intersection(ed_keep_cols)]
+    else:
+        df = df[df.columns.intersection(inpt_keep_cols)]
+    
+    filter_time = time.time() - start_filter
+    timestamp_print(f"  Filtered columns in {filter_time:.1f}s - new shape: {df.shape}")
+    
+    return df
 
 
 # ============================================================================
@@ -177,7 +195,10 @@ def create_demographics_table(ed_filtered, inpt_filtered, population_label):
     """
     Create demographics summary table for a population.
 
-    """
+    """ 
+    # Keep only demographics columns
+    ed_filtered = ed_filtered[ed_demog_cols]
+    inpt_filtered = inpt_filtered[inpt_demog_cols]
     
     combined = pd.concat([ed_filtered, inpt_filtered], ignore_index=True)
     combined_clean_age = combined[combined['AGE'] != 888]
@@ -294,6 +315,113 @@ def create_demographics_table(ed_filtered, inpt_filtered, population_label):
     
     return pd.DataFrame(rows)
 
+def create_top_codes_table(ed_filtered, inpt_filtered, population_label, top_n=10):
+    """
+    Extract top ICD-10, CPT, and DRG codes for a population.
+    
+    """
+
+    combined = pd.concat([ed_filtered, inpt_filtered], ignore_index=True)
+    total_encounters = len(combined)
+    
+    rows = []
+    
+    # === TOP ICD-10 DIAGNOSIS CODES ===
+
+    all_icd_codes = []
+
+    # ED diagnosis codes
+    for col in ed_diag_cols:
+        mask = ed_filtered[col].str.strip() != ''
+        valid_codes = ed_filtered[col][mask]
+        all_icd_codes.extend(valid_codes.tolist())
+
+    # Inpatient diagnosis codes
+    for col in inpt_diag_cols:
+        mask = inpt_filtered[col].str.strip() != ''
+        valid_codes = inpt_filtered[col][mask]
+        all_icd_codes.extend(valid_codes.tolist())
+
+    if all_icd_codes:
+        icd_counts = pd.Series(all_icd_codes).value_counts().head(top_n)
+    
+        if len(icd_counts) == 10:
+            all_total = icd_counts.sum()
+            bottom5_total = icd_counts.iloc[5:].sum()
+            if bottom5_total / all_total < 0.10:  # 10% of all 10
+                icd_counts = icd_counts.head(5)
+    
+        for rank, (code, count) in enumerate(icd_counts.items(), 1):
+            rows.append({
+                'Population': population_label,
+                'Code_Type': 'ICD-10',
+                'Code': code,
+                'Rank': rank,
+                'Count': int(count),
+                'Percent': round(count / total_encounters * 100, 1)})
+    
+    # === TOP CPT PROCEDURE CODES ===
+
+    all_cpt_codes = []
+
+    # ED CPT codes
+    for col in ed_cpt_cols:
+            mask = ed_filtered[col].str.strip() != ''
+            valid_codes = ed_filtered[col][mask]
+            all_cpt_codes.extend(valid_codes.tolist())
+
+    # Inpatient CPT codes
+    for col in inpt_cpt_cols:
+        mask = inpt_filtered[col].str.strip() != ''
+        valid_codes = inpt_filtered[col][mask]
+        all_cpt_codes.extend(valid_codes.tolist())
+
+    if all_cpt_codes:
+        cpt_counts = pd.Series(all_cpt_codes).value_counts().head(top_n)
+    
+        if len(cpt_counts) == 10:
+            all_total = cpt_counts.sum()
+            bottom5_total = cpt_counts.iloc[5:].sum()
+            if bottom5_total / all_total < 0.10:  # 10% of all 10
+                cpt_counts = cpt_counts.head(5)
+    
+        for rank, (code, count) in enumerate(cpt_counts.items(), 1):
+            rows.append({
+                'Population': population_label,
+                'Code_Type': 'CPT',
+                'Code': code,
+                'Rank': rank,
+                'Count': int(count),
+                'Percent': round(count / total_encounters * 100, 1)})
+
+    
+    # === TOP DRG CODES ===
+
+    all_drg_codes = []
+
+    valid_drgs = inpt_filtered['MSDRG'].dropna()
+    all_drg_codes = valid_drgs.tolist()
+    
+    if all_drg_codes:
+        drg_counts = pd.Series(all_drg_codes).value_counts().head(top_n)
+        
+        if len(drg_counts) == 10:
+            all_total = drg_counts.sum()
+            bottom5_total = drg_counts.iloc[5:].sum()
+            if bottom5_total / all_total < 0.10:  # 10% of all 10
+                drg_counts = drg_counts.head(5)
+        
+        for rank, (code, count) in enumerate(drg_counts.items(), 1):
+            rows.append({
+                'Population': population_label,
+                'Code_Type': 'DRG',
+                'Code': code,
+                'Rank': rank,
+                'Count': int(count),
+                'Percent': round(count / len(inpt_filtered) * 100, 1)})
+
+    return pd.DataFrame(rows)
+
 def create_year_summary(year, populations):
     """
     Create comprehensive summary for a single year or combined period.
@@ -341,6 +469,21 @@ def create_year_summary(year, populations):
     combined_demog = pd.concat(demog_summaries, ignore_index=True)
     combined_demog.to_csv(f"{output_dir}/demographics_summary_{year}.csv", index=False)
 
+    # === TOP CODE SUMMARIES ===
+    
+    code_summaries = []
+
+    for pop_name, pop_data in populations.items():
+        top_code = create_top_codes_table(
+            pop_data['ed'],
+            pop_data['inpt'],
+            pop_name
+        )
+        code_summaries.append(top_code)
+
+    combined_codes = pd.concat(code_summaries, ignore_index=True)
+    combined_codes.to_csv(f"{output_dir}/top_codes_summary_{year}.csv", index=False)
+
 # ============================================================================
 # MULTI-YEAR PROCESSING
 # ============================================================================
@@ -361,6 +504,8 @@ def process_multiple_years(years, quarterly=True):
         ed_df = load_encounter_data(year, 'ED', quarterly=quarterly)
         inpt_df = load_encounter_data(year, 'Inpatient', quarterly=quarterly)
         
+        timestamp_print(f"  Starting population filtering...")
+        
         # Filter all populations
         populations = {
             'ADRD+SDOH': {
@@ -374,18 +519,23 @@ def process_multiple_years(years, quarterly=True):
                 'inpt': filter_sdoh_only(inpt_df, inpt_diag_cols, year)}
         }
         
+        timestamp_print(f"  Finished population filtering")
+        timestamp_print(f"  Creating year summaries...")
+        
         # Create year summary
         create_year_summary(year, populations)
-        timestamp_print(f"Exported summaries for {year}")
         
-        # Store for combined 
+        timestamp_print(f"  Exported summaries for {year}")
+        
+        # Store for combined
         for pop_name in populations:
             all_populations[pop_name]['ed'].append(populations[pop_name]['ed'])
             all_populations[pop_name]['inpt'].append(populations[pop_name]['inpt'])
         
         del ed_df, inpt_df
     
-    # Combine all years
+    # === COMBINED SUMMARY (all years) ===
+    
     timestamp_print("Creating combined summary...")
     
     combined_populations = {}
@@ -399,6 +549,7 @@ def process_multiple_years(years, quarterly=True):
     create_year_summary(year_range, combined_populations)
     
     timestamp_print("All summaries exported to output directory.")
+
 
 # ============================================================================
 # ENTRY POINT

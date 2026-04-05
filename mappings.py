@@ -23,21 +23,17 @@ z_code_pattern = re.compile(r'Z5[5-9](?:\.\d+)?|Z6[0-5](?:\.\d+)?')
 # COLUMN DEFINITIONS
 # ============================================================================
 
-# ED diagnosis columns
+# ED analysis cols
 ed_diag_cols = ['REASON_CDE', 'PRINDIAG'] + [f'OTHDIAG{i}' for i in range(1,10)] #OTHDIAG1 - OTHDIAG9
+ed_cpt_cols = [f'OTHCPT{i}' for i in range(1,31)]
+ed_demog_cols = ["SEX", "AGE", "LOSDAYS", "PT_STATUS", "PAYER", "TCHGS"]
+ed_keep_cols = ed_diag_cols + ed_cpt_cols + ed_demog_cols
 
-# Inpatient diagnosis columns
+# Inpatient analysis cols
 inpt_diag_cols = ['ADMITDIAG', 'PRINDIAG'] + [f'OTHDIAG{i}' for i in range(1,31)] #OTHDIAG1 - OTHDIAG30
-
-# ED columns to keep for analysis
-ed_keep_cols = ["SEX", "AGE", "LOSDAYS", "HR_ARRIVAL", "PT_STATUS", "PAYER", "WEEKDAY", "TCHRGS"] + \
-               [f'OTHCPT{i}' for i in range(1, 31)] + \
-               ed_diag_cols
-
-# Inpatient columns to keep for analysis
-inpt_keep_cols = ["SEX", "AGE", "LOSDAYS", "EDHR_ARR", "DISCHSTAT", "PAYER", "WEEKDAY", "ADM_TIME", "MSDRG", "PRINPROC", "TCHRGS"] + \
-               [f'OTHCPT{i}' for i in range(1, 31)] + \
-               inpt_diag_cols
+inpt_cpt_cols = ['PRINPROC'] + [f'OTHPROC{i}' for i in range(1,31)]
+inpt_demog_cols = ["SEX", "AGE", "LOSDAYS", "DISCHSTAT", "PAYER", "MSDRG", "TCHGS"]
+inpt_keep_cols = inpt_diag_cols + inpt_cpt_cols + inpt_demog_cols 
 
 # Define population groups
 POP_NAMES = ['ADRD+SDOH', 'Any_ADRD', 'Any_SDOH']
