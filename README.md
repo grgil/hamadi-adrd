@@ -75,7 +75,7 @@ Scaled exploratory methodology to multi-year, multi-population architecture proc
 
 Investigated whether low SDOH documentation rates in ADRD populations (1.2%) reflected ADRD-specific screening gaps or broader age-related patterns. Implemented age-matched comparison between ADRD and non-ADRD inpatients across four age groups (50-64, 65-74, 75-84, 85+), controlling for care setting.
 
-Analysis revealed SDOH documentation declines sharply with age regardless of ADRD status—dropping approximately 6-fold from 5.8% in ages 50-64 to 0.8% in ages 85+. Within each age stratum, ADRD and non-ADRD rates were nearly identical, indicating the apparent disparity between ADRD (1.48% overall) and general populations (3.75% overall) reflects age composition differences rather than cognitive status.
+Analysis revealed SDOH documentation declines sharply with age regardless of ADRD status—dropping approximately 6-fold from 5.8% in ages 50-64 to 0.8% in ages 85+. Within each age stratum, ADRD and non-ADRD rates were nearly identical, indicating the apparent disparity between inpatient ADRD (1.48% overall) and general inpatient populations (3.75% overall) reflects age composition differences rather than cognitive status.
 
 This finding suggests Z-codes may inadequately capture elderly-specific social risks (caregiver burden, aging in place challenges, social isolation) or that screening protocols are age-biased toward working-age populations where employment, housing instability, and economic factors are more prominent.
 
