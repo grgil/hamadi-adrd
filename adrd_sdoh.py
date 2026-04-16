@@ -422,6 +422,61 @@ def create_top_codes_table(ed_filtered, inpt_filtered, population_label, top_n=1
 
     return pd.DataFrame(rows)
 
+def create_age_match(year, adrd_sdoh_inpt, any_adrd_inpt, any_sdoh_inpt, total_inpt_by_age):
+    """
+    Compare SDOH documentation rates between ADRD and non-ADRD inpatients,
+    stratified by age group.
+    """
+    
+    # Filter to age 50+ for all populations
+    adrd_sdoh_50plus = adrd_sdoh_inpt[adrd_sdoh_inpt['AGE'] >= 50].copy()
+    any_adrd_50plus = any_adrd_inpt[any_adrd_inpt['AGE'] >= 50].copy()
+    any_sdoh_50plus = any_sdoh_inpt[any_sdoh_inpt['AGE'] >= 50].copy()
+    
+    # Create age groups
+    adrd_sdoh_50plus['AGE_GROUP'] = pd.cut(adrd_sdoh_50plus['AGE'], bins=AGE_BINS, labels=AGE_LABELS, right=False)
+    any_adrd_50plus['AGE_GROUP'] = pd.cut(any_adrd_50plus['AGE'], bins=AGE_BINS, labels=AGE_LABELS, right=False)
+    any_sdoh_50plus['AGE_GROUP'] = pd.cut(any_sdoh_50plus['AGE'], bins=AGE_BINS, labels=AGE_LABELS, right=False)
+    
+    rows = []
+    
+    for age_group in AGE_LABELS:
+        # ADRD group
+        adrd_sdoh_count = len(adrd_sdoh_50plus[adrd_sdoh_50plus['AGE_GROUP'] == age_group])
+        adrd_total_count = len(any_adrd_50plus[any_adrd_50plus['AGE_GROUP'] == age_group])
+        adrd_rate = (adrd_sdoh_count / adrd_total_count * 100) if adrd_total_count > 0 else 0
+        
+        rows.append({
+            'Year': year,
+            'Age_Group': age_group,
+            'ADRD_Status': 'ADRD',
+            'SDOH_Documented': adrd_sdoh_count,
+            'Total_Encounters': adrd_total_count,
+            'SDOH_Rate': round(adrd_rate, 2)
+        })
+        
+        # Non-ADRD group
+        # Numerator: Any_SDOH in this age group minus ADRD+SDOH overlap
+        sdoh_in_age = len(any_sdoh_50plus[any_sdoh_50plus['AGE_GROUP'] == age_group])
+        non_adrd_sdoh_count = sdoh_in_age - adrd_sdoh_count
+        
+        # Denominator: Total inpatients in this age group minus ADRD
+        total_in_age = total_inpt_by_age.get(age_group, 0)
+        non_adrd_total_count = total_in_age - adrd_total_count
+        
+        non_adrd_rate = (non_adrd_sdoh_count / non_adrd_total_count * 100) if non_adrd_total_count > 0 else 0
+        
+        rows.append({
+            'Year': year,
+            'Age_Group': age_group,
+            'ADRD_Status': 'Non-ADRD',
+            'SDOH_Documented': non_adrd_sdoh_count,
+            'Total_Encounters': non_adrd_total_count,
+            'SDOH_Rate': round(non_adrd_rate, 2)
+        })
+    
+    return pd.DataFrame(rows)
+
 def create_year_summary(year, populations):
     """
     Create comprehensive summary for a single year or combined period.
@@ -497,12 +552,19 @@ def process_multiple_years(years, quarterly=True):
         'Any_SDOH': {'ed': [], 'inpt': []}
     }
     
+    # Store age-matched comparison rows
+    age_comparison_rows = []
+    
     for year in years:
         timestamp_print(f"Processing {year}...")
         
         # Load
         ed_df = load_encounter_data(year, 'ED', quarterly=quarterly)
         inpt_df = load_encounter_data(year, 'Inpatient', quarterly=quarterly)
+        
+        inpt_50plus = inpt_df[inpt_df['AGE'] >= 50].copy()
+        inpt_50plus['AGE_GROUP'] = pd.cut(inpt_50plus['AGE'], bins=AGE_BINS, labels=AGE_LABELS, right=False)
+        total_inpt_by_age = inpt_50plus['AGE_GROUP'].value_counts().to_dict()
         
         timestamp_print(f"  Starting population filtering...")
         
@@ -524,6 +586,16 @@ def process_multiple_years(years, quarterly=True):
         
         # Create year summary
         create_year_summary(year, populations)
+        
+        # Create age-matched comparison for this year
+        year_comparison = create_age_match(
+            year=year,
+            adrd_sdoh_inpt=populations['ADRD+SDOH']['inpt'],
+            any_adrd_inpt=populations['Any_ADRD']['inpt'],
+            any_sdoh_inpt=populations['Any_SDOH']['inpt'],
+            total_inpt_by_age=total_inpt_by_age
+        )
+        age_comparison_rows.append(year_comparison)
         
         timestamp_print(f"  Exported summaries for {year}")
         
@@ -548,8 +620,12 @@ def process_multiple_years(years, quarterly=True):
     year_range = f"{min(years)}-{max(years)}"
     create_year_summary(year_range, combined_populations)
     
+    # Export age-matched comparison (all years in single file)
+    all_comparisons = pd.concat(age_comparison_rows, ignore_index=True)
+    all_comparisons.to_csv("output/age_matched_sdoh_comparison.csv", index=False)
+    timestamp_print("  Exported age-matched comparison")
+    
     timestamp_print("All summaries exported to output directory.")
-
 
 # ============================================================================
 # ENTRY POINT
@@ -558,4 +634,4 @@ def process_multiple_years(years, quarterly=True):
 if __name__ == "__main__":
     
     years = [2020, 2021, 2022]
-    process_multiple_years(years, quarterly=True)
+    # process_multiple_years(years, quarterly=True)

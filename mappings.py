@@ -39,6 +39,10 @@ inpt_keep_cols = inpt_diag_cols + inpt_cpt_cols + inpt_demog_cols
 POP_NAMES = ['ADRD+SDOH', 'Any_ADRD', 'Any_SDOH']
 SDOH_POP= ['ADRD+SDOH', 'Any_SDOH']
 
+# Define age-comparison bins
+AGE_BINS = [50, 65, 75, 85, 120]
+AGE_LABELS = ['50-64', '65-74', '75-84', '85+']
+
 # ============================================================================
 # Z-CODE CATEGORY MAPPINGS
 # ============================================================================
