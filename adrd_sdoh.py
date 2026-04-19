@@ -31,9 +31,13 @@ def aggregate_quarterly_data(year, care_setting):
     for quarter in range(1, 5):
         filename = f"{year_short}Q{quarter}_{suffix}"
         filepath = f"{source_dir}/{filename}"
+
+        try:
+            quarter_df = pd.read_csv(filepath, low_memory=False)
+            quarterly_dfs.append(quarter_df)
         
-        quarter_df = pd.read_csv(filepath, low_memory=False)
-        quarterly_dfs.append(quarter_df)
+        except FileNotFoundError:
+          timestamp_print(f"  WARNING: Missing file skipped — {filename}")
     
     annual_df = pd.concat(quarterly_dfs, ignore_index=True)
     
@@ -74,6 +78,8 @@ def load_encounter_data(year, care_setting, quarterly=True):
     filter_time = time.time() - start_filter
     timestamp_print(f"  Filtered columns in {filter_time:.1f}s - new shape: {df.shape}")
     
+    # Unknown (999) and 100+ (888) handling
+    df['AGE'] = df['AGE'].replace({888: 100, 999: np.nan})
     return df
 
 
@@ -120,12 +126,10 @@ def filter_sdoh_only(df, diag_cols, year):
 def filter_adrd_with_sdoh(df, diag_cols, year):
     """
     Filter to encounters with ADRD AND SDOH codes.
-    
     """
     adrd_df = filter_adrd_only(df, diag_cols, year)
     
-    sdoh_pattern = get_sdoh_pattern(year)
-    sdoh_mask = has_code_pattern(adrd_df, diag_cols, sdoh_pattern)
+    sdoh_mask = has_code_pattern(adrd_df, diag_cols, z_code_pattern)
     
     filtered = adrd_df[sdoh_mask].copy()
     filtered['YEAR'] = year
@@ -174,19 +178,19 @@ def create_z_code_table(ed_z, inpt_z):
         summary_data.append({
             'Z_Code': code,
             'Category': category,
-            'ED_Count': ed_count,
-            'Inpatient_Count': inpt_count
+            'ED_Code_Occurance': ed_count,
+            'Inpatient_Code_Occurance': inpt_count
         })
     
     summary = pd.DataFrame(summary_data)
     
     # Calculate percentages
-    ed_total = summary['ED_Count'].sum()
-    inpt_total = summary['Inpatient_Count'].sum()
+    ed_total = summary['ED_Code_Occurance'].sum()
+    inpt_total = summary['Inpatient_Code_Occurance'].sum()
     
-    summary['ED_Percent'] = (summary['ED_Count'] / ed_total * 100).round(1) if ed_total > 0 else 0
-    summary['Inpatient_Percent'] = (summary['Inpatient_Count'] / inpt_total * 100).round(1) if inpt_total > 0 else 0
-    summary['Total_Count'] = summary['ED_Count'] + summary['Inpatient_Count']
+    summary['ED_Percent'] = (summary['ED_Code_Occurance'] / ed_total * 100).round(1) if ed_total > 0 else 0
+    summary['Inpatient_Percent'] = (summary['Inpatient_Code_Occurance'] / inpt_total * 100).round(1) if inpt_total > 0 else 0
+    summary['Total_Count'] = summary['ED_Code_Occurance'] + summary['Inpatient_Code_Occurance']
     summary['Total_Percent'] = (summary['Total_Count'] / summary['Total_Count'].sum() * 100).round(1)
     
     return summary
@@ -201,7 +205,7 @@ def create_demographics_table(ed_filtered, inpt_filtered, population_label):
     inpt_filtered = inpt_filtered[inpt_demog_cols]
     
     combined = pd.concat([ed_filtered, inpt_filtered], ignore_index=True)
-    combined_clean_age = combined[combined['AGE'] != 888]
+    combined_clean_age = combined[combined['AGE'] != 999]
     
     rows = []
     
@@ -328,28 +332,31 @@ def create_top_codes_table(ed_filtered, inpt_filtered, population_label, top_n=1
     
     # === TOP ICD-10 DIAGNOSIS CODES ===
 
-    all_icd_codes = []
+    icd_pairs = []
 
     # ED diagnosis codes
     for col in ed_diag_cols:
-        mask = ed_filtered[col].str.strip() != ''
-        valid_codes = ed_filtered[col][mask]
-        all_icd_codes.extend(valid_codes.tolist())
+        mask = ed_filtered[col].str.strip() != ''  # Filter out empty/whitespace
+        pairs = list(zip(ed_filtered.loc[mask, 'SYS_RECID'], ed_filtered.loc[mask, col]))
+        icd_pairs.extend(pairs)
 
     # Inpatient diagnosis codes
     for col in inpt_diag_cols:
         mask = inpt_filtered[col].str.strip() != ''
-        valid_codes = inpt_filtered[col][mask]
-        all_icd_codes.extend(valid_codes.tolist())
+        pairs = list(zip(inpt_filtered.loc[mask, 'SYS_RECID'], inpt_filtered.loc[mask, col]))
+        icd_pairs.extend(pairs)
 
-    if all_icd_codes:
-        icd_counts = pd.Series(all_icd_codes).value_counts().head(top_n)
-    
+    # Convert to dataframe, drop duplicate pairs
+    if icd_pairs:
+        icd_pairs_df = pd.DataFrame(icd_pairs, columns=['SYS_RECID', 'code'])
+        icd_pairs_df = icd_pairs_df.drop_duplicates()
+        icd_counts = icd_pairs_df['code'].value_counts().head(top_n)  # FIX: Access 'code' column
+        
         if len(icd_counts) == 10:
             all_total = icd_counts.sum()
             bottom5_total = icd_counts.iloc[5:].sum()
-            if bottom5_total / all_total < 0.10:  # 10% of all 10
-                icd_counts = icd_counts.head(5)
+            if bottom5_total / all_total < 0.10:  # If bottom 5 are <10% of all 10
+                icd_counts = icd_counts.head(5)  # Return only top 5
     
         for rank, (code, count) in enumerate(icd_counts.items(), 1):
             rows.append({
@@ -362,28 +369,31 @@ def create_top_codes_table(ed_filtered, inpt_filtered, population_label, top_n=1
     
     # === TOP CPT PROCEDURE CODES ===
 
-    all_cpt_codes = []
+    cpt_pairs = []
 
     # ED CPT codes
     for col in ed_cpt_cols:
-            mask = ed_filtered[col].str.strip() != ''
-            valid_codes = ed_filtered[col][mask]
-            all_cpt_codes.extend(valid_codes.tolist())
+        mask = ed_filtered[col].str.strip() != '' 
+        pairs = list(zip(ed_filtered.loc[mask, 'SYS_RECID'], ed_filtered.loc[mask, col]))
+        cpt_pairs.extend(pairs)
 
     # Inpatient CPT codes
     for col in inpt_cpt_cols:
         mask = inpt_filtered[col].str.strip() != ''
-        valid_codes = inpt_filtered[col][mask]
-        all_cpt_codes.extend(valid_codes.tolist())
+        pairs = list(zip(inpt_filtered.loc[mask, 'SYS_RECID'], inpt_filtered.loc[mask, col]))
+        cpt_pairs.extend(pairs)
 
-    if all_cpt_codes:
-        cpt_counts = pd.Series(all_cpt_codes).value_counts().head(top_n)
-    
+    # Convert to dataframe, drop duplicate pairs
+    if cpt_pairs:
+        cpt_pairs_df = pd.DataFrame(cpt_pairs, columns=['SYS_RECID', 'code'])
+        cpt_pairs_df = cpt_pairs_df.drop_duplicates()
+        cpt_counts = cpt_pairs_df['code'].value_counts().head(top_n)
+        
         if len(cpt_counts) == 10:
             all_total = cpt_counts.sum()
             bottom5_total = cpt_counts.iloc[5:].sum()
-            if bottom5_total / all_total < 0.10:  # 10% of all 10
-                cpt_counts = cpt_counts.head(5)
+            if bottom5_total / all_total < 0.10:  # If bottom 5 are <10% of all 10
+                cpt_counts = cpt_counts.head(5)  # Return only top 5
     
         for rank, (code, count) in enumerate(cpt_counts.items(), 1):
             rows.append({
@@ -393,7 +403,6 @@ def create_top_codes_table(ed_filtered, inpt_filtered, population_label, top_n=1
                 'Rank': rank,
                 'Count': int(count),
                 'Percent': round(count / total_encounters * 100, 1)})
-
     
     # === TOP DRG CODES ===
 
@@ -562,7 +571,7 @@ def process_multiple_years(years, quarterly=True):
         ed_df = load_encounter_data(year, 'ED', quarterly=quarterly)
         inpt_df = load_encounter_data(year, 'Inpatient', quarterly=quarterly)
         
-        inpt_50plus = inpt_df[inpt_df['AGE'] >= 50].copy()
+        inpt_50plus = inpt_df[(inpt_df['AGE'] >= 50)].copy()
         inpt_50plus['AGE_GROUP'] = pd.cut(inpt_50plus['AGE'], bins=AGE_BINS, labels=AGE_LABELS, right=False)
         total_inpt_by_age = inpt_50plus['AGE_GROUP'].value_counts().to_dict()
         
@@ -634,4 +643,4 @@ def process_multiple_years(years, quarterly=True):
 if __name__ == "__main__":
     
     years = [2020, 2021, 2022]
-    # process_multiple_years(years, quarterly=True)
+    process_multiple_years(years, quarterly=True)

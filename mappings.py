@@ -6,18 +6,15 @@ from datetime import datetime
 # ============================================================================
 
 # ICD-10 codes (October 2015 onwards)
-# ADRD: F01.50, F01.51, F02.80, F02.81 (vascular dementia, dementia in other diseases)
-adrd_icd10_pattern = re.compile(r'^F0[12]\.(?:5[01]|8[01]).*')
+# ADRD: All Alzheimer's and related dementias (F01, F02, F03, G30, G31.0, G31.83)
+adrd_icd10_pattern = re.compile(r'^(?:F0[123]\.|G30\.|G31\.(?:0|83)).*')
 
+# Z-codes introduced in ICD-10, no ICD-9 equivalent
 # SDOH: Z55-Z65 (education, employment, housing, economic, social environment, legal)
-sdoh_icd10_pattern = re.compile(r"^Z(?:5[5-9]|6[0-5])(?:\.\d+)?$")
+z_code_pattern = re.compile(r'Z(?:5[5-9]|6[0-5])(?:\.\d+)?')
 
-# ICD-9 codes (before October 2015) - TODO: Add patterns in future sprint
+# ICD-9 patterns (before October 2015) - TODO: Add ADRD pattern for earlier years if needed
 adrd_icd9_pattern = None
-sdoh_icd9_pattern = None
-
-# Compile SDOH regex patterns once at module level
-z_code_pattern = re.compile(r'Z5[5-9](?:\.\d+)?|Z6[0-5](?:\.\d+)?')
 
 # ============================================================================
 # COLUMN DEFINITIONS
@@ -27,21 +24,21 @@ z_code_pattern = re.compile(r'Z5[5-9](?:\.\d+)?|Z6[0-5](?:\.\d+)?')
 ed_diag_cols = ['REASON_CDE', 'PRINDIAG'] + [f'OTHDIAG{i}' for i in range(1,10)] #OTHDIAG1 - OTHDIAG9
 ed_cpt_cols = [f'OTHCPT{i}' for i in range(1,31)]
 ed_demog_cols = ["SEX", "AGE", "LOSDAYS", "PT_STATUS", "PAYER", "TCHGS"]
-ed_keep_cols = ed_diag_cols + ed_cpt_cols + ed_demog_cols
+ed_keep_cols = ed_diag_cols + ed_cpt_cols + ed_demog_cols + ["SYS_RECID"]
 
 # Inpatient analysis cols
 inpt_diag_cols = ['ADMITDIAG', 'PRINDIAG'] + [f'OTHDIAG{i}' for i in range(1,31)] #OTHDIAG1 - OTHDIAG30
 inpt_cpt_cols = ['PRINPROC'] + [f'OTHPROC{i}' for i in range(1,31)]
 inpt_demog_cols = ["SEX", "AGE", "LOSDAYS", "DISCHSTAT", "PAYER", "MSDRG", "TCHGS"]
-inpt_keep_cols = inpt_diag_cols + inpt_cpt_cols + inpt_demog_cols 
+inpt_keep_cols = inpt_diag_cols + inpt_cpt_cols + inpt_demog_cols + ["SYS_RECID"]
 
 # Define population groups
 POP_NAMES = ['ADRD+SDOH', 'Any_ADRD', 'Any_SDOH']
 SDOH_POP= ['ADRD+SDOH', 'Any_SDOH']
 
 # Define age-comparison bins
-AGE_BINS = [50, 65, 75, 85, 120]
-AGE_LABELS = ['50-64', '65-74', '75-84', '85+']
+AGE_BINS   = [50, 65, 75, 85, 100, 120]
+AGE_LABELS = ['50-64', '65-74', '75-84', '85-99', '100+']
 
 # ============================================================================
 # Z-CODE CATEGORY MAPPINGS
@@ -72,16 +69,6 @@ def get_adrd_pattern(year):
         return adrd_icd9_pattern
     else: 
         return adrd_icd10_pattern
-    
-def get_sdoh_pattern(year):
-    """
-    Return correct SDOH diagnosis code pattern for year.
-    Uses ICD-9 before October 2015, ICD-10 after.
-    """
-    if year < 2015:
-        return sdoh_icd9_pattern
-    else:
-        return sdoh_icd10_pattern
     
 def categorize_z_code(code):
     """
