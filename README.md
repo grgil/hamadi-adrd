@@ -68,7 +68,7 @@ Scaled exploratory methodology to multi-year, multi-population architecture proc
 
 **Phase 5: Age-Stratified Comparison Analysis** (`adrd_sdoh.py` - `create_age_match()`)
 
-Investigated whether low SDOH documentation rates in ADRD populations (1.2%, 2020) reflected ADRD-specific screening gaps or broader age-related patterns. Implemented age-matched comparison between ADRD and non-ADRD inpatients across four age groups (50-64, 65-74, 75-84, 85+), controlling for care setting.  2020 analysis revealed SDOH documentation declines sharply with age regardless of ADRD status — dropping approximately 6-fold from 5.8% in ages 50-64 to 0.8% in ages 85-99. Within each age stratum, ADRD and non-ADRD rates were nearly identical, indicating the apparent disparity between inpatient ADRD (1.48% overall) and general inpatient populations (3.75% overall) reflects age composition differences rather than cognitive status.
+Investigated whether low SDOH documentation rates in ADRD populations (1.2%, 2020) reflected ADRD-specific screening gaps or broader age-related patterns. Implemented age-matched comparison between ADRD and non-ADRD inpatients across five age groups (50-64, 65-74, 75-84, 85-99, 100+), controlling for care setting. 2020 analysis revealed SDOH documentation declines sharply with age regardless of ADRD status — dropping approximately 6-fold from 5.8% in ages 50-64 to 0.8% in ages 85-99. Within each age stratum, ADRD and non-ADRD rates were nearly identical, indicating the apparent disparity between inpatient ADRD (1.48% overall) and general inpatient populations (3.75% overall) reflects age composition differences rather than cognitive status.
 
 ---
 
@@ -80,7 +80,7 @@ Investigated whether low SDOH documentation rates in ADRD populations (1.2%, 202
 
 **SDOH documentation is increasing temporally across all age groups.** The Any_SDOH population grew 44% from 2020 to 2022 (150k → 217k encounters) while ADRD prevalence remained stable. This temporal trend is visible across both ADRD and non-ADRD populations with proportional increases in all age strata.
 
-**Population demographics reveal distinct age and payer profiles.** Any_SDOH patients are younger (mean age 47.8 vs 81.2 (2020) for Any_ADRD) with Medicaid as top payer (23.4% (2020) vs 56.5% Medicare for ADRD). ADRD+SDOH represents the intersection: older than general SDOH but with similar male overrepresentation (63% Any_SDOH vs 51.2% ADRD+SDOH, 2020).
+**Population demographics reveal distinct age and payer profiles.** Any_SDOH patients are younger (mean age 47.8 vs 81.8 (2020) for Any_ADRD) with Medicaid as top payer (23.4% (2020) vs 56.5% Medicare for ADRD). ADRD+SDOH represents the intersection: older than general SDOH, with Any_SDOH skewing male (63%) while ADRD+SDOH is nearly even (51.2% male, 2020)
 
 ---
 
