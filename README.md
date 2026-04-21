@@ -18,7 +18,7 @@ To analyze SDOH documentation patterns, we developed an automated Python pipelin
 
 **Data Processing:**
 - Aggregated quarterly encounter data (ED and Inpatient) across 3 years
-- Implemented modular architecture and vectorized filtering across 20M+ encounter records using pre-compiled regex patterns
+- Implemented vectorized filtering across 20M+ encounter records using pre-compiled regex patterns
 - Applied SDOH code extraction (Z55-Z65 range) across all available diagnosis columns
 - ED encounters restricted to hospital-based ED visits (type_serv = 2); ambulatory surgery and cardiac catheterization encounters excluded
 
@@ -60,7 +60,6 @@ Built demographic summary tables for ADRD+SDOH population across categorical var
 Scaled exploratory methodology to multi-year, multi-population architecture processing 2020-2022 data. Analysis restricted to 2016 forward to ensure full ICD-10 coverage; the ICD-9 to ICD-10 transition occurred October 1, 2015, and Z-codes have no ICD-9 equivalent. Current runs use 2020-2022. Implemented:
 
 - **Modular configuration architecture** (`mappings.py`): Centralized ICD-10 pattern definitions, column specifications, population metadata, and Z-code category mappings. Pre-compiled regex patterns at module level to eliminate redundant compilation overhead during filtering operations. ADRD code set expanded from Bynum-Standard to full ADRD spectrum (F01.x, F02.x, F03.x, G30.x, G31.0, G31.83) appropriate for encounter-level analysis; validated against original codes using 2020 outputs
-- ED encounter filtering: ED files contain both emergency department visits (type_serv = 2) and ambulatory surgery/cath encounters (type_serv = 1); pipeline restricts to type_serv = 2 at read time
 - Performance optimization through vectorized pandas operations and usecols at read time (~4-5 min per year). Column reduction strategy balances memory constraints with analytical completeness (95 → 47 columns ED, 193 → 70 columns Inpatient)
 
 **Files:**
