@@ -8,7 +8,7 @@
 
 Social determinants of health (SDOH)—factors like housing instability, employment challenges, and social isolation—significantly impact outcomes for individuals with dementia. However, SDOH documentation in clinical encounters remains understudied, and patterns of capture across different populations are poorly understood.
 
-This project analyzes Florida ED snd Inpatient claims data (2020-2022) to characterize SDOH documentation patterns in ADRD populations and compare them to broader healthcare utilization trends. The analysis targets three distinct populations to understand both prevalence and temporal trends in SDOH capture.
+This project analyzes Florida ED and Inpatient claims data (2020-2022) to characterize SDOH documentation patterns in ADRD populations and compare them to broader healthcare utilization trends. The analysis targets three distinct populations to understand both prevalence and temporal trends in SDOH capture.
 
 ---
 
