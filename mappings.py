@@ -7,11 +7,15 @@ from datetime import datetime
 
 # ICD-10 codes (October 2015 onwards)
 # ADRD: All Alzheimer's and related dementias (F01, F02, F03, G30, G31.0, G31.83)
-adrd_icd10_pattern = re.compile(r'^(?:F0[123]\.|G30\.|G31\.(?:0|83)).*')
+adrd_icd10_pattern = re.compile(r'^(?:F0[123]\.|G30\.|G31\.(?:0|83)).*') 
+
+# ADRD: F01.50, F01.51, F02.80, F02.81 (vascular dementia, dementia in other diseases)
+# adrd_icd10_pattern = re.compile(r'^F0[12]\.(?:5[01]|8[01]).*')
 
 # Z-codes introduced in ICD-10, no ICD-9 equivalent
 # SDOH: Z55-Z65 (education, employment, housing, economic, social environment, legal)
 z_code_pattern = re.compile(r'Z(?:5[5-9]|6[0-5])(?:\.\d+)?')
+
 
 # ICD-9 patterns (before October 2015) - TODO: Add ADRD pattern for earlier years if needed
 adrd_icd9_pattern = None
@@ -23,14 +27,12 @@ adrd_icd9_pattern = None
 # ED analysis cols
 ed_diag_cols = ['REASON_CDE', 'PRINDIAG'] + [f'OTHDIAG{i}' for i in range(1,10)] #OTHDIAG1 - OTHDIAG9
 ed_cpt_cols = [f'OTHCPT{i}' for i in range(1,31)]
-ed_demog_cols = ["SEX", "AGE", "LOSDAYS", "PT_STATUS", "PAYER", "TCHGS"]
-ed_keep_cols = ed_diag_cols + ed_cpt_cols + ed_demog_cols + ["SYS_RECID"]
+ed_keep_cols = ed_diag_cols + ed_cpt_cols + ["SYS_RECID", "SEX", "AGE", "PT_STATUS", "PAYER", "TYPE_SERV"]
 
 # Inpatient analysis cols
 inpt_diag_cols = ['ADMITDIAG', 'PRINDIAG'] + [f'OTHDIAG{i}' for i in range(1,31)] #OTHDIAG1 - OTHDIAG30
 inpt_cpt_cols = ['PRINPROC'] + [f'OTHPROC{i}' for i in range(1,31)]
-inpt_demog_cols = ["SEX", "AGE", "LOSDAYS", "DISCHSTAT", "PAYER", "MSDRG", "TCHGS"]
-inpt_keep_cols = inpt_diag_cols + inpt_cpt_cols + inpt_demog_cols + ["SYS_RECID"]
+inpt_keep_cols = inpt_diag_cols + inpt_cpt_cols + ["SYS_RECID", "SEX", "AGE", "DISCHSTAT", "PAYER", "MSDRG"]
 
 # Define population groups
 POP_NAMES = ['ADRD+SDOH', 'Any_ADRD', 'Any_SDOH']
@@ -65,7 +67,7 @@ def get_adrd_pattern(year):
     Return correct ADRD diagnosis code pattern for year.
     Uses ICD-9 before October 2015, ICD-10 after.
     """
-    if year < 2015:
+    if year < 2016:
         return adrd_icd9_pattern
     else: 
         return adrd_icd10_pattern

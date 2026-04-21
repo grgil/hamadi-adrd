@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import re
 
 from mappings import *
 
@@ -25,6 +24,7 @@ def aggregate_quarterly_data(year, care_setting):
     
     suffix = 'ED.csv' if care_setting == 'ED' else 'INP.csv'
     year_short = str(year)[-2:]
+    keep_cols = ed_keep_cols if care_setting == 'ED' else inpt_keep_cols
     
     quarterly_dfs = []
     
@@ -33,11 +33,13 @@ def aggregate_quarterly_data(year, care_setting):
         filepath = f"{source_dir}/{filename}"
 
         try:
-            quarter_df = pd.read_csv(filepath, low_memory=False)
+            quarter_df = pd.read_csv(filepath, usecols=keep_cols, low_memory=False)
+            if care_setting == 'ED':
+                quarter_df = quarter_df[quarter_df['TYPE_SERV'] == 2]
             quarterly_dfs.append(quarter_df)
         
         except FileNotFoundError:
-          timestamp_print(f"  WARNING: Missing file skipped — {filename}")
+            timestamp_print(f"  WARNING: Missing file skipped — {filename}")
     
     annual_df = pd.concat(quarterly_dfs, ignore_index=True)
     
@@ -47,36 +49,19 @@ def load_encounter_data(year, care_setting, quarterly=True):
     """
     Load encounter data for specified year and care setting.
     """
-    import time
     
     care_setting = care_setting.upper()
-    
-    # Time the loading
-    start_load = time.time()
     
     if quarterly:
         df = aggregate_quarterly_data(year, care_setting)
     else:
+        keep_cols = ed_keep_cols if care_setting == 'ED' else inpt_keep_cols
+        filepath = f"{source_dir}/ED_{year}.csv" if care_setting == 'ED' else f"{source_dir}/INPATIENT_{year}.csv"
+        df = pd.read_csv(filepath, usecols=keep_cols, low_memory=False)
         if care_setting == 'ED':
-            filepath = f"{source_dir}/ED_{year}.csv"
-        else:
-            filepath = f"{source_dir}/INPATIENT_{year}.csv"
-        
-        df = pd.read_csv(filepath, low_memory=False)
+            df = df[df['TYPE_SERV'] == 2]
     
-    load_time = time.time() - start_load
-    timestamp_print(f"  Loaded {care_setting} data in {load_time:.1f}s - shape: {df.shape}")
-    
-    # Time the column filtering
-    start_filter = time.time()
-    
-    if care_setting == 'ED':
-        df = df[df.columns.intersection(ed_keep_cols)]
-    else:
-        df = df[df.columns.intersection(inpt_keep_cols)]
-    
-    filter_time = time.time() - start_filter
-    timestamp_print(f"  Filtered columns in {filter_time:.1f}s - new shape: {df.shape}")
+    timestamp_print(f"  Loaded {care_setting} data - shape: {df.shape}")
     
     # Unknown (999) and 100+ (888) handling
     df['AGE'] = df['AGE'].replace({888: 100, 999: np.nan})
@@ -136,19 +121,18 @@ def filter_adrd_with_sdoh(df, diag_cols, year):
     
     return filtered
 
-def extract_all_z_codes(row, diag_cols):
+def extract_z_codes(df, diag_cols):
     """
     Extract all Z55-Z65 codes from diagnosis columns in an encounter.
-
     """
-    z_codes = []
+    long = (df[diag_cols]
+            .melt(ignore_index=False, value_name='dx')
+            .dropna(subset=['dx']))
     
-    for col in diag_cols:
-        if pd.notna(row[col]):
-            matches = [m[:3] for m in z_code_pattern.findall(str(row[col]))]
-            z_codes.extend(matches)
+    matches = long['dx'].str.findall(z_code_pattern.pattern)
+    matches = matches.explode().str[:3].dropna()
     
-    return z_codes
+    return matches.groupby(level=0).apply(list).reindex(df.index, fill_value=[])
 
 
 # ============================================================================
@@ -200,9 +184,6 @@ def create_demographics_table(ed_filtered, inpt_filtered, population_label):
     Create demographics summary table for a population.
 
     """ 
-    # Keep only demographics columns
-    ed_filtered = ed_filtered[ed_demog_cols]
-    inpt_filtered = inpt_filtered[inpt_demog_cols]
     
     combined = pd.concat([ed_filtered, inpt_filtered], ignore_index=True)
     combined_clean_age = combined[combined['AGE'] != 999]
@@ -350,7 +331,7 @@ def create_top_codes_table(ed_filtered, inpt_filtered, population_label, top_n=1
     if icd_pairs:
         icd_pairs_df = pd.DataFrame(icd_pairs, columns=['SYS_RECID', 'code'])
         icd_pairs_df = icd_pairs_df.drop_duplicates()
-        icd_counts = icd_pairs_df['code'].value_counts().head(top_n)  # FIX: Access 'code' column
+        icd_counts = icd_pairs_df['code'].value_counts().head(top_n)
         
         if len(icd_counts) == 10:
             all_total = icd_counts.sum()
@@ -508,8 +489,8 @@ def create_year_summary(year, populations):
     for pop_name, pop_data in populations.items():
         if pop_name in SDOH_POP:
             
-            ed_z = pop_data['ed'].apply(lambda row: extract_all_z_codes(row, ed_diag_cols), axis=1)
-            inpt_z = pop_data['inpt'].apply(lambda row: extract_all_z_codes(row, inpt_diag_cols), axis=1)
+            ed_z = extract_z_codes(pop_data['ed'], ed_diag_cols)
+            inpt_z = extract_z_codes(pop_data['inpt'], inpt_diag_cols)
             
             z_summary = create_z_code_table(ed_z, inpt_z)
             z_summary.insert(0, 'Population', pop_name)
@@ -553,13 +534,6 @@ def create_year_summary(year, populations):
 # ============================================================================
 
 def process_multiple_years(years, quarterly=True):
-    
-    # Store populations
-    all_populations = {
-        'ADRD+SDOH': {'ed': [], 'inpt': []},
-        'Any_ADRD': {'ed': [], 'inpt': []},
-        'Any_SDOH': {'ed': [], 'inpt': []}
-    }
     
     # Store age-matched comparison rows
     age_comparison_rows = []
@@ -607,31 +581,12 @@ def process_multiple_years(years, quarterly=True):
         age_comparison_rows.append(year_comparison)
         
         timestamp_print(f"  Exported summaries for {year}")
-        
-        # Store for combined
-        for pop_name in populations:
-            all_populations[pop_name]['ed'].append(populations[pop_name]['ed'])
-            all_populations[pop_name]['inpt'].append(populations[pop_name]['inpt'])
-        
-        del ed_df, inpt_df
-    
-    # === COMBINED SUMMARY (all years) ===
-    
-    timestamp_print("Creating combined summary...")
-    
-    combined_populations = {}
-    for pop_name in all_populations:
-        combined_populations[pop_name] = {
-            'ed': pd.concat(all_populations[pop_name]['ed'], ignore_index=True),
-            'inpt': pd.concat(all_populations[pop_name]['inpt'], ignore_index=True)
-        }
-    
-    year_range = f"{min(years)}-{max(years)}"
-    create_year_summary(year_range, combined_populations)
+
+        del ed_df, inpt_df, populations
     
     # Export age-matched comparison (all years in single file)
     all_comparisons = pd.concat(age_comparison_rows, ignore_index=True)
-    all_comparisons.to_csv("output/age_matched_sdoh_comparison.csv", index=False)
+    all_comparisons.to_csv(f"{output_dir}/age_matched_sdoh_comparison.csv", index=False)  # CHANGED: hardcoded path → output_dir variable
     timestamp_print("  Exported age-matched comparison")
     
     timestamp_print("All summaries exported to output directory.")
