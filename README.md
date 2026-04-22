@@ -70,7 +70,7 @@ Investigated whether low inpatient SDOH documentation rates in ADRD populations 
 
 ## Key Findings
 
-**SDOH documentation declines sharply with age.** 2020 inpatient age-stratified analysis revealed inpatient SDOH documentation rates drop approximately 6-fold from working-age (5.8% in ages 50-64) to elderly populations (0.8% in ages 85+). Within each age stratum, ADRD and non-ADRD rates are nearly identical, indicating the apparent disparity between inpatient ADRD (1.34% overall) and general inpatient populations reflects age composition differences rather than ADRD-specific screening gaps. This pattern holds consistently across all three years.
+**SDOH documentation declines sharply with age.** 2020 inpatient age-stratified analysis revealed inpatient SDOH documentation rates drop approximately 6-fold from working-age (5.8% in ages 50-64) to elderly populations (0.8% in ages 85+). Within each age stratum, ADRD and non-ADRD rates are nearly identical, indicating the apparent disparity between inpatient ADRD (1.34%) and non-ADRD inpatient populations (2.96%, ages 50+) reflects age composition differences rather than ADRD-specific screening gaps. This pattern holds consistently across all three years.
 
 **Housing dominates documented SDOH in both populations** — representing 53-63% of Any_SDOH codes and 36-45% of ADRD+SDOH codes across years — substantially more prevalent than employment (4-13% across years and populations), family/household issues (2-11% across years and populations), or other social factors. ADRD patients are overwhelmingly inpatient (92.6% of ADRD+SDOH encounters vs 65.8% for Any_SDOH, 2020), suggesting different care patterns and potentially different screening workflows.
 
