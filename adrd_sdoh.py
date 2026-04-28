@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import os 
 
 from mappings import *
 
@@ -18,7 +19,6 @@ output_dir = './output'
 def aggregate_quarterly_data(year, care_setting):
     """
     Load and combine quarterly encounter data for a given year and care setting.
-
     """
     care_setting = care_setting.upper()
     
@@ -34,8 +34,6 @@ def aggregate_quarterly_data(year, care_setting):
 
         try:
             quarter_df = pd.read_csv(filepath, usecols=keep_cols, low_memory=False)
-            if care_setting == 'ED':
-                quarter_df = quarter_df[quarter_df['TYPE_SERV'] == 2]
             quarterly_dfs.append(quarter_df)
         
         except FileNotFoundError:
@@ -45,26 +43,51 @@ def aggregate_quarterly_data(year, care_setting):
     
     return annual_df
 
-def load_encounter_data(year, care_setting, quarterly=True):
+
+def load_encounter_data(year, care_setting, quarterly='auto'):
     """
     Load encounter data for specified year and care setting.
     """
     
     care_setting = care_setting.upper()
+
+    # Auto-detect quarterly vs annual
+    if quarterly == 'auto':
+        year_short = str(year)[-2:]
+        suffix = 'ED.csv' if care_setting == 'ED' else 'INP.csv'
+        test_file = f"{source_dir}/{year_short}Q1_{suffix}"
+    
+    quarterly = os.path.exists(test_file)
     
     if quarterly:
         df = aggregate_quarterly_data(year, care_setting)
     else:
         keep_cols = ed_keep_cols if care_setting == 'ED' else inpt_keep_cols
-        filepath = f"{source_dir}/ED_{year}.csv" if care_setting == 'ED' else f"{source_dir}/INPATIENT_{year}.csv"
+        filepath = f"{source_dir}/{year}_ED.csv" if care_setting == 'ED' else f"{source_dir}/{year}_INP.csv"
         df = pd.read_csv(filepath, usecols=keep_cols, low_memory=False)
-        if care_setting == 'ED':
-            df = df[df['TYPE_SERV'] == 2]
+    
+    # Filter ED to TYPE_SERV == 2 only
+    if care_setting == 'ED':
+        df = df[df['TYPE_SERV'] == 2]
     
     timestamp_print(f"  Loaded {care_setting} data - shape: {df.shape}")
     
-    # Unknown (999) and 100+ (888) handling
-    df['AGE'] = df['AGE'].replace({888: 100, 999: np.nan})
+    # Age handling - varies by year
+    if year >= 2018:
+        # 2018+ uses special age indicators
+        age_777_count = (df['AGE'] == 777).sum()
+        age_888_count = (df['AGE'] == 888).sum()
+        age_999_count = (df['AGE'] == 999).sum()
+        
+        df['AGE'] = df['AGE'].replace({777: 0, 888: 100, 999: np.nan})
+        timestamp_print(f"  Age handling: Recoded {age_777_count:,} (777 to 0), {age_888_count:,} (888 to 100), Excluded {age_999_count:,} (999 to NaN)")
+    
+    else:
+        # 2015-2017: Exclude ages >= 130 as invalid/unknown
+        age_invalid_count = (df['AGE'] >= 130).sum()
+        df.loc[df['AGE'] >= 130, 'AGE'] = np.nan
+        timestamp_print(f"  Age handling: Excluded {age_invalid_count:,} (age>=130 as unknown/invalid)")
+    
     return df
 
 
@@ -329,8 +352,12 @@ def create_top_codes_table(ed_filtered, inpt_filtered, population_label, top_n=1
 
     # Convert to dataframe, drop duplicate pairs
     if icd_pairs:
+        pre_dedup = len(icd_pairs)
         icd_pairs_df = pd.DataFrame(icd_pairs, columns=['SYS_RECID', 'code'])
         icd_pairs_df = icd_pairs_df.drop_duplicates()
+        post_dedup = len(icd_pairs_df)
+
+        timestamp_print(f"    {population_label} ICD: {pre_dedup:,} instances to {post_dedup:,} unique pairs")
         icd_counts = icd_pairs_df['code'].value_counts().head(top_n)
         
         if len(icd_counts) == 10:
@@ -366,8 +393,12 @@ def create_top_codes_table(ed_filtered, inpt_filtered, population_label, top_n=1
 
     # Convert to dataframe, drop duplicate pairs
     if cpt_pairs:
+        pre_dedup = len(cpt_pairs)
         cpt_pairs_df = pd.DataFrame(cpt_pairs, columns=['SYS_RECID', 'code'])
         cpt_pairs_df = cpt_pairs_df.drop_duplicates()
+        post_dedup = len(cpt_pairs_df)
+
+        timestamp_print(f"    {population_label} CPT: {pre_dedup:,} instances to {post_dedup:,} unique pairs")
         cpt_counts = cpt_pairs_df['code'].value_counts().head(top_n)
         
         if len(cpt_counts) == 10:
@@ -528,12 +559,15 @@ def create_year_summary(year, populations):
 
     combined_codes = pd.concat(code_summaries, ignore_index=True)
     combined_codes.to_csv(f"{output_dir}/top_codes_summary_{year}.csv", index=False)
+    
+    whitespace_count = combined_codes['Code'].astype(str).str.contains(r'\s').sum()
+    timestamp_print(f"  Top codes whitespace check: {whitespace_count} codes with whitespace (all populations)")
 
 # ============================================================================
 # MULTI-YEAR PROCESSING
 # ============================================================================
 
-def process_multiple_years(years, quarterly=True):
+def process_multiple_years(years, quarterly='auto'):
     
     # Store age-matched comparison rows
     age_comparison_rows = []
@@ -549,6 +583,8 @@ def process_multiple_years(years, quarterly=True):
         inpt_50plus['AGE_GROUP'] = pd.cut(inpt_50plus['AGE'], bins=AGE_BINS, labels=AGE_LABELS, right=False)
         total_inpt_by_age = inpt_50plus['AGE_GROUP'].value_counts().to_dict()
         
+        age_bin_str = ', '.join([f'{ag}={count:,}' for ag, count in sorted(total_inpt_by_age.items())])
+        timestamp_print(f"  Age bins: {age_bin_str}")        
         timestamp_print(f"  Starting population filtering...")
         
         # Filter all populations
@@ -565,6 +601,12 @@ def process_multiple_years(years, quarterly=True):
         }
         
         timestamp_print(f"  Finished population filtering")
+
+        for pop_name in POP_NAMES:
+            ed_n = len(populations[pop_name]['ed'])
+            inpt_n = len(populations[pop_name]['inpt'])
+            timestamp_print(f"    {pop_name}: ED={ed_n:,}, Inpt={inpt_n:,}, Total={ed_n + inpt_n:,}")
+
         timestamp_print(f"  Creating year summaries...")
         
         # Create year summary
@@ -586,7 +628,7 @@ def process_multiple_years(years, quarterly=True):
     
     # Export age-matched comparison (all years in single file)
     all_comparisons = pd.concat(age_comparison_rows, ignore_index=True)
-    all_comparisons.to_csv(f"{output_dir}/age_matched_sdoh_comparison.csv", index=False)  # CHANGED: hardcoded path → output_dir variable
+    all_comparisons.to_csv(f"{output_dir}/age_matched_sdoh_comparison.csv", index=False)  
     timestamp_print("  Exported age-matched comparison")
     
     timestamp_print("All summaries exported to output directory.")
@@ -596,6 +638,7 @@ def process_multiple_years(years, quarterly=True):
 # ============================================================================
 
 if __name__ == "__main__":
-    
-    years = [2020, 2021, 2022]
-    process_multiple_years(years, quarterly=True)
+
+    # Run the pipeline
+    all_years = [2016, 2017, 2018, 2019, 2020, 2021, 2022]
+    process_multiple_years(all_years, quarterly='auto')

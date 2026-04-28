@@ -39,7 +39,7 @@ POP_NAMES = ['ADRD+SDOH', 'Any_ADRD', 'Any_SDOH']
 SDOH_POP= ['ADRD+SDOH', 'Any_SDOH']
 
 # Define age-comparison bins
-AGE_BINS   = [50, 65, 75, 85, 100, 120]
+AGE_BINS   = [50, 65, 75, 85, 100, 130]
 AGE_LABELS = ['50-64', '65-74', '75-84', '85-99', '100+']
 
 # ============================================================================
