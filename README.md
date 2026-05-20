@@ -8,7 +8,7 @@
 
 Social determinants of health (SDOH)—factors like housing instability, employment challenges, and social isolation—significantly impact outcomes for individuals with dementia. However, SDOH documentation in clinical encounters remains understudied, and patterns of capture across different populations are poorly understood.
 
-This project analyzes Florida ED and Inpatient claims data (2020-2022) to characterize SDOH documentation patterns in ADRD populations and compare them to broader healthcare utilization trends. The analysis targets three distinct populations to understand both prevalence and temporal trends in SDOH capture.
+This project analyzes Florida ED and Inpatient claims data (2016-2022) to characterize SDOH documentation patterns in ADRD populations and compare them to broader healthcare utilization trends. The analysis targets three distinct populations to understand both prevalence and temporal trends in SDOH capture. It is a faculty-directed graduate research project completed as part of the UNF Health Informatics MS program, advised by Dr. Hanadi Hamadi.
 
 ---
 
@@ -17,7 +17,7 @@ This project analyzes Florida ED and Inpatient claims data (2020-2022) to charac
 To analyze SDOH documentation patterns, we developed an automated Python pipeline implementing the following approach:
 
 **Data Processing:**
-- Aggregated and filtered 20M+ encounter records across quarterly ED and inpatient files (2020-2022)
+- Aggregated and filtered 100M+ encounter records across quarterly ED and inpatient files (2016-2022)
 - Applied SDOH code extraction (Z55-Z65) and ADRD identification across all diagnosis columns
 - ED encounters restricted to hospital-based visits (type_serv = 2); ambulatory surgery and cardiac catheterization excluded
 
@@ -53,7 +53,7 @@ Built demographic summary tables for ADRD+SDOH population across categorical var
 
 **Phase 4: Production Pipeline Development** (`adrd_sdoh.py`, `mappings.py`)
 
-Scaled exploratory methodology to multi-year, multi-population architecture processing 2020-2022 data. Analysis restricted to 2016 forward to ensure full ICD-10 coverage; the ICD-9 to ICD-10 transition occurred October 1, 2015, and Z-codes have no ICD-9 equivalent. Current runs use 2020-2022. Implemented:
+Scaled exploratory methodology to multi-year, multi-population architecture processing 2016-2022 data. Analysis restricted to 2016 forward to ensure full ICD-10 coverage and Z-code utilization; the ICD-9 to ICD-10 transition occurred October 1, 2015, and Z-codes have no ICD-9 equivalent. Implemented:
 
 - **Modular configuration architecture** (`mappings.py`): Centralized ICD-10 pattern definitions, column specifications, population metadata, and Z-code category mappings. Pre-compiled regex patterns at module level to eliminate redundant compilation overhead during filtering operations. ADRD code set expanded from Bynum-Standard to full ADRD spectrum (F01.x, F02.x, F03.x, G30.x, G31.0, G31.83) appropriate for encounter-level analysis; validated against original codes using 2020 outputs
 - Performance optimization through vectorized pandas operations and usecols at read time (~4-5 min per year). Column reduction strategy balances memory constraints with analytical completeness (95 → 47 columns ED, 193 → 70 columns Inpatient)
@@ -64,7 +64,7 @@ Scaled exploratory methodology to multi-year, multi-population architecture proc
 
 **Phase 5: Age-Stratified Comparison Analysis** (`adrd_sdoh.py` - `create_age_match()`)
 
-Investigated whether low inpatient SDOH documentation rates in ADRD populations (1.34%, 2020) reflected ADRD-specific screening gaps or broader age-related patterns. Implemented age-matched comparison between ADRD and non-ADRD inpatients across five age groups (50-64, 65-74, 75-84, 85-99, 100+), controlling for care setting. Results are summarized in Key Findings.
+Investigated whether low inpatient SDOH documentation rates in ADRD populations (1.34%, 2020) reflected ADRD-specific screening gaps or broader age-related patterns. Implemented age-matched comparison between ADRD and non-ADRD inpatients across five age groups (50-64, 65-74, 75-84, 85-99, 100+), controlling for care setting. Age preprocessing for this analysis excludes unknown values (999), recodes age 100+ (888) to 100, and recodes age 29–364 days (777) to 0.
 
 ---
 
@@ -72,7 +72,7 @@ Investigated whether low inpatient SDOH documentation rates in ADRD populations 
 
 **SDOH documentation declines sharply with age.** 2020 inpatient age-stratified analysis revealed inpatient SDOH documentation rates drop approximately 6-fold from working-age (5.8% in ages 50-64) to elderly populations (0.8% in ages 85+). Within each age stratum, ADRD and non-ADRD rates are nearly identical, indicating the apparent disparity between inpatient ADRD (1.34%) and non-ADRD inpatient populations (2.96%, ages 50+) reflects age composition differences rather than ADRD-specific screening gaps. This pattern holds consistently across all three years.
 
-**Housing dominates documented SDOH in both populations** — representing 53-63% of Any_SDOH codes and 36-45% of ADRD+SDOH codes across years — substantially more prevalent than employment (4-13% across years and populations), family/household issues (2-11% across years and populations), or other social factors. ADRD patients are overwhelmingly inpatient (92.6% of ADRD+SDOH encounters vs 65.8% for Any_SDOH, 2020), suggesting different care patterns and potentially different screening workflows.
+**Housing dominates documented SDOH in both populations** — representing 53-63% of Any_SDOH codes and 36-45% of ADRD+SDOH codes across initial evaluation years (2020-2022) — substantially more prevalent than employment (4-13% across years and populations), family/household issues (2-11% across years and populations), or other social factors. ADRD patients are overwhelmingly inpatient (92.6% of ADRD+SDOH encounters vs 65.8% for Any_SDOH, 2020), suggesting different care patterns and potentially different screening workflows.
 
 **SDOH documentation is increasing temporally across all age groups.** The Any_SDOH population grew 44% from 2020 to 2022 (150k → 217k encounters) while ADRD prevalence remained stable. This temporal trend is visible across both ADRD and non-ADRD populations with proportional increases in all age strata.
 
@@ -85,14 +85,6 @@ Investigated whether low inpatient SDOH documentation rates in ADRD populations 
 **Current analysis is descriptive and uses encounter-level data.** Findings establish prevalence and patterns but do not test causal relationships between SDOH documentation and outcomes. Additionally, the assumption that encounters are independent limits ability to examine within-patient patterns or longitudinal trajectories. Hierarchical modeling accounting for patient and hospital clustering, combined with patient-level linkage, would enable more sophisticated analyses.
 
 **Age-stratified findings assume documentation reflects true prevalence, but elderly populations may be systematically underdocumented.** The 6-fold decline in documentation from working-age to elderly populations suggests either genuine prevalence differences or measurement issues with Z-codes in elderly care contexts. Z-codes designed for working-age social issues (employment, housing instability) may inadequately capture elderly-specific risks (caregiver burden, aging in place challenges). Additionally, the current implementation extracts codes from all diagnosis columns (PRINDIAG + OTHDIAG1-30) since SDOH codes frequently appear in secondary positions; future work should examine whether principal diagnosis provides more clinically relevant signal.
-
----
-
-## Graduate Research Context
-
-MS Health Informatics thesis work (University of North Florida, expected December 2026). Faculty advisor: Professor Hanadi Hamadi.
-
-Primary research questions: What social determinants are documented for dementia patients? How do SDOH patterns differ between ADRD and general populations? What temporal trends exist in SDOH capture from 2020-2022?
 
 ---
 
